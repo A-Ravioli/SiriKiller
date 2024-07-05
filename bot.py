@@ -3,6 +3,7 @@ from tkinter import PhotoImage
 import speech_recognition as sr
 import pyttsx3
 from ollama import Ollama
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
 import torch
 
 # Initialize the speech recognition and text-to-speech engines
@@ -12,7 +13,13 @@ tts_engine = pyttsx3.init()
 # Initialize Ollama with the quantized LLaMA model
 ollama = Ollama(model_name="quantized-llama3")
 
+# Load the GPT-2 model and tokenizer
+model_name = "distilgpt2"
+tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+model = GPT2LMHeadModel.from_pretrained(model_name)
 
+
+# Use the speech recognition engine to listen to the microphone
 def speech_to_text():
     with sr.Microphone() as source:
         recognizer.adjust_for_ambient_noise(source)
@@ -31,11 +38,22 @@ def speech_to_text():
         return ""
 
 
-def generate_response(input_text):
-    response = ollama.complete(prompt=input_text, max_tokens=50)
-    response_text = response["choices"][0]["text"].strip()
-    print("Chatbot response: " + response_text)
-    return response_text
+def generate_response(input_text, model=model, tokenizer=tokenizer):
+    if torch.cuda.is_available():
+        model = model.cuda()
+    if model == "gpt2":
+        input_ids = tokenizer.encode(input_text, return_tensors="pt")
+        if torch.cuda.is_available():
+            input_ids = input_ids.cuda()
+        output = model.generate(input_ids, max_length=50, num_return_sequences=1)
+        response_text = tokenizer.decode(output[0], skip_special_tokens=True)
+        print("Chatbot response: " + response_text)
+        return response_text
+    else:
+        response = ollama.complete(prompt=input_text, max_tokens=50)
+        response_text = response["choices"][0]["text"].strip()
+        print("Chatbot response: " + response_text)
+        return response_text
 
 
 def text_to_speech(text):
